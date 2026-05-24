@@ -1,7 +1,7 @@
 'use strict';
 
-if (!window.__linkedinScraperV425) {
-window.__linkedinScraperV425 = true;
+if (!window.__linkedinScraperV426) {
+window.__linkedinScraperV426 = true;
 
 const SCRAPER_TAG = '[LinkedIn Scraper]';
 
@@ -26,22 +26,32 @@ function cleanText(text) {
 
 function parseLinkedInDate(str) {
   if (!str) return new Date().toISOString().split('T')[0];
-  const s = str.replace('•', '').toLowerCase().trim();
+  const s = str
+    .replace(/Edytowano/gi, '')
+    .replace('•', '')
+    .toLowerCase()
+    .trim();
   const now = new Date();
-  if (/godz|min|just|s\.|h\b|g\./.test(s))
-    return now.toISOString().split('T')[0];
   const d = s.match(/(\d+)\s*(d\.|dni|day)/);
-  if (d) { now.setDate(now.getDate() - parseInt(d[1], 10));
-    return now.toISOString().split('T')[0]; }
+  if (d) {
+    now.setDate(now.getDate() - parseInt(d[1], 10));
+    return now.toISOString().split('T')[0];
+  }
   const w = s.match(/(\d+)\s*(tyg|tydz|week|w\.)/);
-  if (w) { now.setDate(now.getDate() - parseInt(w[1], 10) * 7);
-    return now.toISOString().split('T')[0]; }
+  if (w) {
+    now.setDate(now.getDate() - parseInt(w[1], 10) * 7);
+    return now.toISOString().split('T')[0];
+  }
   const mo = s.match(/(\d+)\s*(mies|month|mo\.)/);
-  if (mo) { now.setMonth(now.getMonth() - parseInt(mo[1], 10));
-    return now.toISOString().split('T')[0]; }
-  const y = s.match(/(\d+)\s*(rok|year|y\.)/);
-  if (y) { now.setFullYear(now.getFullYear() - parseInt(y[1], 10));
-    return now.toISOString().split('T')[0]; }
+  if (mo) {
+    now.setMonth(now.getMonth() - parseInt(mo[1], 10));
+    return now.toISOString().split('T')[0];
+  }
+  const y = s.match(/(\d+)\s*(r\/l|rok|year|y\.)/);
+  if (y) {
+    now.setFullYear(now.getFullYear() - parseInt(y[1], 10));
+    return now.toISOString().split('T')[0];
+  }
   return now.toISOString().split('T')[0];
 }
 
@@ -105,8 +115,28 @@ function getDate(container) {
   const el = container.querySelector(
     'span[class*="update-components-actor__sub-description"]'
   );
-  if (el) return el.innerText.replace('•', '').trim();
+  if (el) {
+    return el.innerText
+      .replace(/Edytowano/gi, '')
+      .replace('•', '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
   return '';
+}
+
+function getCommentText(container, nestedContainer) {
+  const commentary = container.querySelector(
+    '[class*="update-components-update-v2__commentary"]'
+  );
+  if (!commentary) return '';
+
+  if (!nestedContainer) return cleanText(commentary.innerText);
+
+  const nestedText = nestedContainer.innerText || '';
+  const fullText = commentary.innerText || '';
+  const comment = fullText.replace(nestedText, '').trim();
+  return cleanText(comment);
 }
 
 function getFullText(container) {
@@ -201,13 +231,6 @@ function extractPost(container, index, profileName, profileTitle) {
     return { ...base, typ: 'POST', tresc, oryg_autor: '', oryg_tresc: '' };
   }
 
-  const topCommentary = container.querySelector(
-    ':scope > [class*="commentary"], :scope > div > [class*="commentary"]'
-  );
-  const commentText = topCommentary
-    ? cleanText(topCommentary.innerText)
-    : '';
-
   let nestedContainer = nested;
   if (!nestedContainer) {
     for (const sel of NESTED_RESHARE_SELECTORS) {
@@ -215,6 +238,8 @@ function extractPost(container, index, profileName, profileTitle) {
       if (nestedContainer) break;
     }
   }
+
+  const commentText = getCommentText(container, nestedContainer);
 
   let origText = '';
   if (nestedContainer) {
