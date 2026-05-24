@@ -1,3 +1,7 @@
+(() => {
+  if (globalThis.__linkedinScraperLoaded) return;
+  globalThis.__linkedinScraperLoaded = true;
+
 const SCRAPER_TAG = '[LinkedIn Scraper]';
 
 const POST_SELECTOR = '[class*="feed-shared-update-v2"][data-urn*="activity"]';
@@ -352,9 +356,15 @@ async function runScraper() {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === 'PING') {
+    sendResponse({ ok: true });
+    return;
+  }
   if (msg.type === 'START_SCRAPE') {
     runScraper();
     sendResponse({ ok: true });
   }
   return true;
 });
+
+})();

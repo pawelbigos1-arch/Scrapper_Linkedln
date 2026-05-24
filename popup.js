@@ -36,9 +36,22 @@
     return tab;
   }
 
-  async function injectContentScript(tabId) {
+  async function pingContentScript(tabId) {
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: "PING" });
+      return res?.ok === true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function ensureContentScript(tabId) {
+    if (await pingContentScript(tabId)) return;
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
     await new Promise((r) => setTimeout(r, 300));
+    if (!(await pingContentScript(tabId))) {
+      throw new Error("Nie udało się załadować skryptu. Odśwież stronę LinkedIn.");
+    }
   }
 
   async function checkPageReady() {
@@ -77,12 +90,8 @@
         throw new Error("Otwórz stronę recent-activity profilu LinkedIn.");
       }
 
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: "START_SCRAPE" });
-      } catch {
-        await injectContentScript(tab.id);
-        await chrome.tabs.sendMessage(tab.id, { type: "START_SCRAPE" });
-      }
+      await ensureContentScript(tab.id);
+      await chrome.tabs.sendMessage(tab.id, { type: "START_SCRAPE" });
     } catch (err) {
       setStatus(`Błąd: ${err.message}`);
       setProgress(0);
