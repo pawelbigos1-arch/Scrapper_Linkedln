@@ -1,17 +1,15 @@
 'use strict';
 
-if (!window.__linkedinScraperV424) {
-window.__linkedinScraperV424 = true;
+if (!window.__linkedinScraperV425) {
+window.__linkedinScraperV425 = true;
 
 const SCRAPER_TAG = '[LinkedIn Scraper]';
 
 const POST_SELECTOR = '[class*="feed-shared-update-v2"][data-urn*="activity"]';
 const NESTED_RESHARE_SELECTORS = [
   '[class*="update-components-mini-update-v2"]',
-  '[class*="reshare"]',
-  '[class*="shared-update"]',
   '[class*="feed-shared-mini-update"]',
-  '[class*="repost"]',
+  '[class*="reshare"]',
 ];
 
 function sleep(ms) {
@@ -111,17 +109,20 @@ function getDate(container) {
   return '';
 }
 
-function expandSeeMore(container) {
-  container.querySelectorAll(
-    '[class*="inline-show-more"], [class*="see-more"], button[aria-label*="więcej"]'
-  ).forEach((btn) => {
-    try { btn.click(); } catch (e) { /* ignore */ }
-  });
-}
-
 function getFullText(container) {
   if (!container) return '';
-  expandSeeMore(container);
+
+  const more = container.querySelector(
+    '[class*="inline-show-more"], [class*="see-more-less-toggle"], [class*="see-more"], button[aria-label*="więcej"]'
+  );
+  if (more) {
+    try { more.click(); } catch (e) { /* ignore */ }
+  }
+
+  const commentary = container.querySelector(
+    '[class*="update-components-update-v2__commentary"]'
+  );
+  if (commentary) return cleanText(commentary.innerText);
 
   const spans = container.querySelectorAll('span[dir="ltr"]');
   let longest = '';
@@ -129,14 +130,6 @@ function getFullText(container) {
     const t = s.innerText.trim();
     if (t.length > longest.length) longest = t;
   });
-
-  if (!longest) {
-    const comm = container.querySelector(
-      '[class*="commentary"], [class*="update-components-text"]'
-    );
-    if (comm) longest = comm.innerText.trim();
-  }
-
   return cleanText(longest);
 }
 
@@ -170,74 +163,20 @@ function findNestedContainer(container) {
 }
 
 function isReshare(container) {
-  if (findNestedContainer(container)) return true;
-
-  const header = container.querySelector(
-    '.update-components-header__text-view, [class*="header__text"]'
+  const hasNestedPost = !!(
+    container.querySelector('[class*="update-components-mini-update-v2"]') ||
+    container.querySelector('[class*="feed-shared-mini-update"]') ||
+    container.querySelector(
+      '[class*="update-v2__commentary"] [class*="update-v2__commentary"]'
+    )
   );
-  if (header?.innerText?.match(/udost[eę]pni[łl]/i)) return true;
 
-  const actorNames = container.querySelectorAll(
-    '[class*="update-components-actor__name"], .feed-shared-actor__name'
+  const authorLinks = container.querySelectorAll('a[href*="/in/"]');
+  const uniqueProfiles = new Set(
+    Array.from(authorLinks).map((a) => a.href.split('?')[0])
   );
-  if (actorNames.length >= 2) return true;
 
-  return container.querySelectorAll('a[href*="/in/"]').length >= 2;
-}
-
-function getReshareComment(container, nested) {
-  if (nested) {
-    const outer = getFullText(container);
-    const inner = getFullText(nested);
-    if (outer && inner && outer.length > inner.length) {
-      const diff = cleanText(outer.replace(inner, ''));
-      if (diff.length > 5) return diff;
-    }
-  }
-
-  const nestedSpans = nested
-    ? new Set(nested.querySelectorAll('span[dir="ltr"]'))
-    : new Set();
-
-  for (const span of container.querySelectorAll('span[dir="ltr"]')) {
-    if (nested && nested.contains(span)) continue;
-    const t = cleanText(span.innerText);
-    if (t.length > 15) return t;
-  }
-
-  return '';
-}
-
-function getOriginalAuthor(container, nested) {
-  if (nested) {
-    const nameEl = nested.querySelector(
-      '[class*="update-components-actor__name"], .feed-shared-actor__name'
-    );
-    if (nameEl?.innerText?.trim()) return nameEl.innerText.trim();
-
-    const link = nested.querySelector('a[href*="/in/"]');
-    if (link?.innerText?.trim()) return link.innerText.trim();
-  }
-
-  const links = container.querySelectorAll('a[href*="/in/"]');
-  if (links.length >= 2) return links[1].innerText.trim();
-  return '';
-}
-
-function getOriginalText(container, nested) {
-  if (nested) {
-    const text = getFullText(nested);
-    if (text) return text;
-  }
-
-  const allDirs = container.querySelectorAll('span[dir="ltr"]');
-  if (allDirs.length >= 2) {
-    return cleanText(allDirs[allDirs.length - 1].innerText);
-  }
-
-  if (container.querySelector('video')) return '[VIDEO]';
-  if (container.querySelector('[class*="document"]')) return '[DOKUMENT]';
-  return '[MEDIA — brak tekstu]';
+  return hasNestedPost || uniqueProfiles.size >= 2;
 }
 
 function extractPost(container, index, profileName, profileTitle) {
@@ -262,9 +201,36 @@ function extractPost(container, index, profileName, profileTitle) {
     return { ...base, typ: 'POST', tresc, oryg_autor: '', oryg_tresc: '' };
   }
 
-  const commentText = getReshareComment(container, nested);
-  const origText = getOriginalText(container, nested);
-  const origAuthor = getOriginalAuthor(container, nested);
+  const topCommentary = container.querySelector(
+    ':scope > [class*="commentary"], :scope > div > [class*="commentary"]'
+  );
+  const commentText = topCommentary
+    ? cleanText(topCommentary.innerText)
+    : '';
+
+  let nestedContainer = nested;
+  if (!nestedContainer) {
+    for (const sel of NESTED_RESHARE_SELECTORS) {
+      nestedContainer = container.querySelector(sel);
+      if (nestedContainer) break;
+    }
+  }
+
+  let origText = '';
+  if (nestedContainer) {
+    origText = getFullText(nestedContainer);
+  }
+  if (!origText) {
+    if (container.querySelector('video')) origText = '[VIDEO]';
+    else if (container.querySelector('[class*="document"]')) origText = '[DOKUMENT]';
+    else origText = '[MEDIA — brak tekstu]';
+  }
+
+  let origAuthor = '';
+  if (nestedContainer) {
+    origAuthor =
+      nestedContainer.querySelector('a[href*="/in/"]')?.innerText.trim() || '';
+  }
 
   console.log(
     SCRAPER_TAG,
