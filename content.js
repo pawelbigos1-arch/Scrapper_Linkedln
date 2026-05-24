@@ -1,7 +1,7 @@
-(() => {
-  if (globalThis.__linkedinScraperLoaded) return;
-  globalThis.__linkedinScraperLoaded = true;
+if (window.__linkedinScraperBoot) return;
+window.__linkedinScraperBoot = true;
 
+(function () {
 const SCRAPER_TAG = '[LinkedIn Scraper]';
 
 const POST_SELECTOR = '[class*="feed-shared-update-v2"][data-urn*="activity"]';
