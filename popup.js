@@ -45,34 +45,15 @@
     }
   }
 
-  async function resetScraperState(tabId) {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        delete window.__linkedinScraperBoot;
-        delete window.__linkedinScraperLoaded;
-        delete window.__linkedinScraperOnMessage;
-      },
-      world: "ISOLATED",
-    });
-  }
-
   async function ensureContentScript(tabId) {
     if (await pingContentScript(tabId)) return;
 
-    await resetScraperState(tabId);
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["content.js"],
-      world: "ISOLATED",
-    });
-
-    for (let i = 0; i < 15; i++) {
-      await new Promise((r) => setTimeout(r, 200));
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 300));
       if (await pingContentScript(tabId)) return;
     }
 
-    throw new Error("Nie udało się załadować skryptu. Odśwież stronę LinkedIn (Cmd+Shift+R).");
+    throw new Error("Odśwież stronę LinkedIn (Cmd+Shift+R), potem kliknij Zbierz posty.");
   }
 
   async function checkPageReady() {
