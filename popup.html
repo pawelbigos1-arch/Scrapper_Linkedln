@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Scraper</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>LinkedIn Scraper</h1>
+    </header>
+
+    <div class="page-ready">
+      <span id="ready-dot" class="ready-dot"></span>
+      <span id="ready-label">Strona gotowa?</span>
+    </div>
+
+    <div class="status-section">
+      <div id="status">Otwórz stronę recent-activity profilu</div>
+      <div class="progress-bar-container">
+        <div id="progress-bar"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="btn-scrape" class="btn btn-primary">▶ Zbierz posty</button>
+      <button type="button" id="btn-download" class="btn btn-secondary" disabled>⬇ Pobierz TXT</button>
+    </div>
+
+    <div id="saved-path"></div>
+
+    <footer>linkedin.com/in/[profil]/recent-activity/all/</footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
