@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Scraper",
-  "version": "4.2.2",
+  "version": "4.2.3",
   "description": "Scrapuje posty i komentarze z LinkedIn do plików TXT dla analizy AI",
   "permissions": ["activeTab", "scripting", "downloads", "storage"],
   "host_permissions": ["https://www.linkedin.com/*"],

@@ -1,7 +1,6 @@
-if (window.__linkedinScraperBoot) return;
-window.__linkedinScraperBoot = true;
-
 (function () {
+'use strict';
+
 const SCRAPER_TAG = '[LinkedIn Scraper]';
 
 const POST_SELECTOR = '[class*="feed-shared-update-v2"][data-urn*="activity"]';
@@ -355,7 +354,7 @@ async function runScraper() {
   });
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+function onScraperMessage(msg, _sender, sendResponse) {
   if (msg.type === 'PING') {
     sendResponse({ ok: true });
     return;
@@ -365,6 +364,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true });
   }
   return true;
-});
+}
+
+if (window.__linkedinScraperOnMessage) {
+  chrome.runtime.onMessage.removeListener(window.__linkedinScraperOnMessage);
+}
+window.__linkedinScraperOnMessage = onScraperMessage;
+chrome.runtime.onMessage.addListener(onScraperMessage);
 
 })();
