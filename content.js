@@ -1,7 +1,7 @@
 'use strict';
 
-if (!window.__linkedinScraperV430) {
-window.__linkedinScraperV430 = true;
+if (!window.__linkedinScraperV431) {
+window.__linkedinScraperV431 = true;
 
 const SCRAPER_TAG = '[LinkedIn Scraper]';
 const MAX_HISTORY_MONTHS = 3;
@@ -11,7 +11,11 @@ const NESTED_RESHARE_SELECTORS = [
   '[class*="update-components-mini-update-v2"]',
   '[class*="feed-shared-mini-update"]',
   '[class*="reshare"]',
+  '[class*="shared-update"]',
 ];
+
+const COMMENTARY_SELECTOR =
+  '[class*="update-components-update-v2__commentary"], div.update-components-text.update-components-update-v2__commentary';
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
@@ -170,33 +174,43 @@ function getDate(container) {
   return '';
 }
 
-function getCommentText(container, nestedContainer) {
-  const commentary = container.querySelector(
-    '[class*="update-components-update-v2__commentary"]'
-  );
-  if (!commentary) return '';
+function findCommentaryBlocks(container) {
+  return Array.from(container.querySelectorAll(COMMENTARY_SELECTOR));
+}
 
-  if (!nestedContainer) return cleanText(commentary.innerText);
+function expandSeeMore(container) {
+  container.querySelectorAll(
+    '[class*="inline-show-more"], [class*="see-more-less-toggle"], [class*="see-more"], button[aria-label*="więcej"]'
+  ).forEach((btn) => {
+    try { btn.click(); } catch (e) { /* ignore */ }
+  });
+}
+
+function getCommentText(container, nestedContainer) {
+  expandSeeMore(container);
+  const all = findCommentaryBlocks(container);
+  if (!all.length) return '';
+
+  if (!nestedContainer) {
+    return cleanText(all[0].innerText);
+  }
+
+  expandSeeMore(nestedContainer);
+  const outerBlocks = all.filter((el) => !nestedContainer.contains(el));
+  if (outerBlocks.length) {
+    return cleanText(outerBlocks.map((el) => el.innerText).join('\n\n'));
+  }
 
   const nestedText = nestedContainer.innerText || '';
-  const fullText = commentary.innerText || '';
-  const comment = fullText.replace(nestedText, '').trim();
-  return cleanText(comment);
+  const fullText = all.map((el) => el.innerText).join('\n');
+  return cleanText(fullText.replace(nestedText, ''));
 }
 
 function getFullText(container) {
   if (!container) return '';
+  expandSeeMore(container);
 
-  const more = container.querySelector(
-    '[class*="inline-show-more"], [class*="see-more-less-toggle"], [class*="see-more"], button[aria-label*="więcej"]'
-  );
-  if (more) {
-    try { more.click(); } catch (e) { /* ignore */ }
-  }
-
-  const commentary = container.querySelector(
-    '[class*="update-components-update-v2__commentary"]'
-  );
+  const commentary = container.querySelector(COMMENTARY_SELECTOR);
   if (commentary) return cleanText(commentary.innerText);
 
   const spans = container.querySelectorAll('span[dir="ltr"]');
@@ -234,24 +248,42 @@ function findNestedContainer(container) {
     const nested = container.querySelector(sel);
     if (nested && nested !== container) return nested;
   }
+
+  const innerPosts = container.querySelectorAll(POST_SELECTOR);
+  for (const el of innerPosts) {
+    if (el !== container) return el;
+  }
+
+  const nestedCommentary = container.querySelector(
+    '[class*="update-v2__commentary"] [class*="update-v2__commentary"]'
+  );
+  if (nestedCommentary) {
+    return (
+      nestedCommentary.closest('[class*="mini-update"]') ||
+      nestedCommentary.closest('[class*="feed-shared-update"]') ||
+      nestedCommentary.parentElement
+    );
+  }
+
   return null;
 }
 
 function isReshare(container) {
-  const hasNestedPost = !!(
-    container.querySelector('[class*="update-components-mini-update-v2"]') ||
-    container.querySelector('[class*="feed-shared-mini-update"]') ||
-    container.querySelector(
-      '[class*="update-v2__commentary"] [class*="update-v2__commentary"]'
-    )
+  if (findNestedContainer(container)) return true;
+
+  const header = container.querySelector(
+    '.update-components-header__text-view, [class*="header__text"]'
   );
+  if (header?.innerText?.match(/udost[eę]pni[łl]/i)) return true;
+
+  if (findCommentaryBlocks(container).length >= 2) return true;
 
   const authorLinks = container.querySelectorAll('a[href*="/in/"]');
   const uniqueProfiles = new Set(
     Array.from(authorLinks).map((a) => a.href.split('?')[0])
   );
 
-  return hasNestedPost || uniqueProfiles.size >= 2;
+  return uniqueProfiles.size >= 2;
 }
 
 function extractPost(container, index, profileName, profileTitle) {
@@ -298,8 +330,14 @@ function extractPost(container, index, profileName, profileTitle) {
 
   let origAuthor = '';
   if (nestedContainer) {
-    origAuthor =
-      nestedContainer.querySelector('a[href*="/in/"]')?.innerText.trim() || '';
+    const nameEl = nestedContainer.querySelector(
+      '[class*="update-components-actor__name"], .feed-shared-actor__name'
+    );
+    origAuthor = nameEl?.innerText.trim() || '';
+    if (!origAuthor) {
+      origAuthor =
+        nestedContainer.querySelector('a[href*="/in/"]')?.innerText.trim() || '';
+    }
   }
 
   console.log(
