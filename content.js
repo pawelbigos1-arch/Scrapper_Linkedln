@@ -1,9 +1,10 @@
 'use strict';
 
-if (!window.__linkedinScraperV426) {
-window.__linkedinScraperV426 = true;
+if (!window.__linkedinScraperV430) {
+window.__linkedinScraperV430 = true;
 
 const SCRAPER_TAG = '[LinkedIn Scraper]';
+const MAX_HISTORY_MONTHS = 3;
 
 const POST_SELECTOR = '[class*="feed-shared-update-v2"][data-urn*="activity"]';
 const NESTED_RESHARE_SELECTORS = [
@@ -52,7 +53,51 @@ function parseLinkedInDate(str) {
     now.setFullYear(now.getFullYear() - parseInt(y[1], 10));
     return now.toISOString().split('T')[0];
   }
+  const absolute = parseAbsoluteLinkedInDate(s);
+  if (absolute) return absolute;
   return now.toISOString().split('T')[0];
+}
+
+function parseAbsoluteLinkedInDate(s) {
+  const PL_MONTHS = {
+    sty: 0, lut: 1, mar: 2, kwi: 3, maj: 4, cze: 5,
+    lip: 6, sie: 7, wrz: 8, paź: 8, paz: 8, lis: 10, gru: 11,
+  };
+  const EN_MONTHS = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
+  const m = s.match(/(\d{1,2})\s+([a-ząćęłńóśźż.]+)\s+(\d{4})/i);
+  if (!m) return null;
+  const day = parseInt(m[1], 10);
+  const monKey = m[2].toLowerCase().replace(/\./g, '').slice(0, 3);
+  const year = parseInt(m[3], 10);
+  const month = PL_MONTHS[monKey] ?? EN_MONTHS[monKey];
+  if (month === undefined) return null;
+  const d = new Date(year, month, day);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().split('T')[0];
+}
+
+function getCutoffDate() {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - MAX_HISTORY_MONTHS);
+  cutoff.setHours(0, 0, 0, 0);
+  return cutoff;
+}
+
+function isWithinHistory(isoDate) {
+  const postDate = new Date(isoDate + 'T12:00:00');
+  return postDate >= getCutoffDate();
+}
+
+function isPostTooOld(container) {
+  const iso = parseLinkedInDate(getDate(container));
+  return !isWithinHistory(iso);
+}
+
+function containersExceedHistory(containers) {
+  return containers.some(isPostTooOld);
 }
 
 function getProfileInfo() {
@@ -312,7 +357,8 @@ function buildFilename(name) {
 }
 
 async function runScraper() {
-  console.log(SCRAPER_TAG, '=== START ===');
+  const cutoffIso = getCutoffDate().toISOString().split('T')[0];
+  console.log(SCRAPER_TAG, `=== START (ostatnie ${MAX_HISTORY_MONTHS} mies., od ${cutoffIso}) ===`);
   const profileInfo = getProfileInfo();
   let lastCount = 0;
   let idleRounds = 0;
@@ -320,21 +366,31 @@ async function runScraper() {
   while (idleRounds < 3) {
     window.scrollBy(0, 900);
     await sleep(1800);
-    const count = findPostContainers().length;
+    const containers = findPostContainers();
+    const count = containers.length;
     chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count });
+    if (containersExceedHistory(containers)) {
+      console.log(SCRAPER_TAG, 'Limit 3 miesięcy — koniec scrollowania');
+      break;
+    }
     if (count > lastCount) { lastCount = count; idleRounds = 0; }
     else { idleRounds++; }
-    if (lastCount >= 60) break;
   }
 
-  const containers = findPostContainers();
+  const allContainers = findPostContainers();
+  const containers = allContainers.filter((c) => !isPostTooOld(c));
+  const skipped = allContainers.length - containers.length;
+  if (skipped > 0) {
+    console.log(SCRAPER_TAG, `Pominięto ${skipped} postów starszych niż ${MAX_HISTORY_MONTHS} mies.`);
+  }
+
   const posts = containers.map((c, i) =>
     extractPost(c, i + 1, profileInfo.name, profileInfo.title)
   );
   const own = posts.filter((p) => p.typ === 'POST').length;
   const re = posts.filter((p) => p.typ === 'UDOSTĘPNIENIE').length;
 
-  console.log(SCRAPER_TAG, `KONIEC: ${posts.length} postów (${own} własne, ${re} udostępnienia)`);
+  console.log(SCRAPER_TAG, `KONIEC: ${posts.length} postów (${own} własne, ${re} udostępnienia, limit ${MAX_HISTORY_MONTHS} mies.)`);
 
   chrome.runtime.sendMessage({
     type: 'SCRAPE_DONE',
