@@ -140,7 +140,7 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "UPDATE_COUNT" && isScraping) {
-      setProgress(Math.min(95, Math.round((msg.count / 60) * 85) + 10));
+      setProgress(Math.min(95, 10 + msg.count * 3));
       setStatus(`Znaleziono: ${msg.count} postów | Scrollowanie...`);
     }
 
